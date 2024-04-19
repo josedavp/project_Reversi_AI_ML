@@ -51,11 +51,53 @@ import numpy as np
 
 
 
-class reversiModel:
+class ReversiModel:
     
     
     
     def predict():
         pass
 
+class CurrentBoardEnviroment:
+    def __init__(self):
+        pass
+    
+    def getState(self):
+        pass
+    
+class WeightedBoardEnviroment:
+    def __init__(self):
+        pass
+    def getState(self):
+        pass
+        
+class PolicyNet:
+    def __init__(self):
+        pass 
+    
+    def forward(self):
+        pass
+
+class ReplayMemory(self):
+    def __init__(self):
+        pass
+        
+    def push(self):
+        pass
+    
+    def sample(self):
+        pass
+        
+    def __len__(self):
+        pass
+        
+        
+def train():
+    pass
+    
+def test():
+    pass
+    
+        
+    
 
