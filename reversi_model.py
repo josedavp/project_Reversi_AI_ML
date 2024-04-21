@@ -58,19 +58,6 @@ class WeightedBoardEnviroment:
         pass
     def getState(self):
         pass
-        
-class PolicyNet(nn.Module): #Actor
-    def __init__(self):
-        pass 
-    
-    def forward(self):
-        pass
-class ValueNet(nn.Module): #Critic
-    def __init__(self):
-        pass 
-    
-    def forward(self):
-        pass
 
 class ReplayMemory(object):
     def __init__(self, capacity):
@@ -84,6 +71,37 @@ class ReplayMemory(object):
         
     def __len__(self):
         return len(self.memory)
+        
+        
+class PolicyNet(nn.Module): #Actor
+    def __init__(self, n_observations, n_actions):
+        super(PolicyNet, self)._init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions) 
+    
+    def forward(self):
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        x = F.relu(self.layer3(x))
+        x = F.softmax(x)
+        return x
+    
+class ValueNet(nn.Module): #Critic
+    def __init__(self):
+        pass 
+    
+    def forward(self):
+        pass
+
+  
+def select_action(state):
+    probs = p_net(state).cpu()
+    m = Categorical(probs)
+    action = m.sample()
+    return action.item(), m.log_prob(action)
+        
+
         
         
 def train():
