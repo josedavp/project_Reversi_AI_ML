@@ -42,6 +42,10 @@ Transition = namedtuple('Transition',
 class ReversiModel: # perhaps combine both current board and weighed board to find best solution? 
     # game is then calculated either here or in reality just by game training model
     # then result is sent back to use
+    
+    #handle actual reversi content here, add the current and weighted board here
+    # optimize it and it will be used and the env with select actions
+    # then once handled in ML training and testing output will be returned and send back to main_player.py
     def __init__(self):
         pass
     
