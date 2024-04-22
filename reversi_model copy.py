@@ -16,10 +16,10 @@ import numpy as np
 BATCH_SIZE = 512
 GAMMA = 0.99
 EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 1000
+EPS_END = 0.01 #changed from 0.05
+EPS_DECAY = 500 #1000
 TAU = 0.005
-LR = 1e-4
+LR = 2e-4 #1e-4
 
 # TODO not all these classes will be needed then. 
 class ReversiModel: # perhaps combine both current board and weighed board to find best solution? 
@@ -58,6 +58,22 @@ class ReversiEnviroment:
 
     #not sure 
     def observation_space(self):
+        pass
+
+class CurrentBoardEnviroment: #pass the current board state; therefore naming should be this
+    # or perhaps use this class and weighted board for reversimodel work
+    def __init__(self):
+        pass
+    
+    def getState(self):
+        pass
+    
+#   TODO
+class WeightedBoardEnviroment: #create a weighted multi dimension array/board for optimization
+    # similar to the action in last tournament
+    def __init__(self):
+        pass
+    def getState(self):
         pass
 
 class ReplayMemory(object):
@@ -129,7 +145,9 @@ def select_action(state):
     m = Categorical(probs)
     action = m.sample()
     return action.item(), m.log_prob(action)
-    
+
+
+        
 def train(): #like this for now adjust contents later
     episode_durations = []
     steps_done = 0

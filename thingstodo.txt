@@ -1,0 +1,32 @@
+Need to figure out how to incorporate reversi into ML 
+such as passing the board enviroment into the ML file
+Also how does it get affected by the other 'player'? 
+It needs to simulate the next path and find the best path available through training model
+then return best model in testing. Return the coordinates and use in real game
+
+Also what should the reward be?
+And is a weighted board a good idea to manually do or automitically make (longer to implement though)
+if so it needs to be incorporated into the enviroment. Dont exactly need to have its own class for it.
+
+So then the idea is to first steps:
+Create template of reversi_model:
+    This involves creating a:
+        * ReversiModel
+        * ReversiEnviroment
+        * ReplayMemory, PolicyNet, ValueNet
+    Now ReversiEnviroment will include:
+        methods:
+            reset, step, 
+            maybe: action_space, observation_space
+    ReplayMemory, PolicyNet, ValueNet will include:
+        Mostly remain the same as in past policy gradient example
+    Now maybe CurrentBoardEnviroment & WeightedBoardEnviroment can be combined?
+
+1. Pass game board from main (thats the current enviroment)
+2. Create simulation of game that will determine ML
+    - integrating reversi rules and class
+3. Create action step, observation_space, 
+
+Think of this similar to last assignment
+Q(s,a)
+
