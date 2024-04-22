@@ -24,22 +24,13 @@ def main():
        
         predicted_move = reversi_model.predict(board)
         
-        #MiniMax Algorithm  - Replace with your algorithm
-        #x,y = minimax.minimax_Algorithm(game, turn, depth)
         # Print the chosen move
         print("Selected move:", (predicted_move[0], predicted_move[1])) #x, y))
         print()
+        x = predicted_move[0]
+        y = predicted_move[1]
         
-        ####
-        #  So turn doesn't need to be updated since it does so on its own as long as x, y is -1, -1
-        # look at greedy player as an example of how it runs. Your now in the minimax algorithm.
-        # we still the entire contents of game since thats whats being used to step and read board
-        # could turn not be updated?
-        ##########
         game.step(x,y, turn, True)
-        
-        
-        
         
         ###############################
         
