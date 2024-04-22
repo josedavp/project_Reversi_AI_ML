@@ -13,12 +13,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.distributions import Categorical
 import numpy as np
 
-env = #gym.make('CartPole-v1')
-observation, info = env.reset(seed=42)
-
-action = env.action_space.sample()  # this is where you would insert your policy
-observation, reward, terminated, truncated, info = env.step(action)
-
 BATCH_SIZE = 512
 GAMMA = 0.99
 EPS_START = 0.9
@@ -27,17 +21,6 @@ EPS_DECAY = 500 #1000
 TAU = 0.005
 LR = 2e-4 #1e-4
 
-# Get number of actions from gym action space
-n_actions = env.action_space.n
-# Get the number of state observations
-state, info = env.reset()
-n_observations = len(state)
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
-
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
 
 class ReversiModel: # perhaps combine both current board and weighed board to find best solution? 
     # game is then calculated either here or in reality just by game training model
@@ -51,6 +34,22 @@ class ReversiModel: # perhaps combine both current board and weighed board to fi
     
     def predict(self, board_state):
         pass
+
+class ReversiEnviroment:
+    def __init__(self, board):
+        self.game_state = board
+    
+    def reset(self, board):
+        self.game_state = board
+        return self.game_state
+    
+    def step(self, action):
+        observation = self.game_state
+        #reward =
+        #terminated = T or F
+        #info = Extra Info
+        #return all data
+        return observation # for now 
 
 class CurrentBoardEnviroment: #pass the current board state; therefore naming should be this
     # or perhaps use this class and weighted board for reversimodel work
@@ -106,7 +105,27 @@ class ValueNet(nn.Module): #Critic
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         return self.fc3(x)
-    
+##########
+#TODO Keep here for the moment
+env = #gym.make('CartPole-v1')
+observation, info = env.reset(seed=42)
+
+action = env.action_space.sample()  # this is where you would insert your policy
+observation, reward, terminated, truncated, info = env.step(action)
+
+# Get number of actions from gym action space
+n_actions = env.action_space.n
+# Get the number of state observations
+state, info = env.reset()
+n_observations = len(state)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device('cpu')
+
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+################3
+
 p_net = PolicyNet(n_observations, n_actions).to(device)
 
 optimizer = optim.AdamW(p_net.parameters(), lr=LR, amsgrad=True)
