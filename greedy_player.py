@@ -4,13 +4,13 @@ import pygame
 import numpy as np
 import socket, pickle
 from reversi import reversi
-from minimax_algorithm import MiniMax
+#from minimax_algorithm import MiniMax
 
 def main():
     game_socket = socket.socket()
     game_socket.connect(('127.0.0.1', 33333))
     game = reversi()
-    minimax = MiniMax()
+   # minimax = MiniMax()
     
     #############
     depth = 4 #figure out correct depth or if needs to be adjusted dynamically

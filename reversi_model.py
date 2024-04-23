@@ -21,14 +21,9 @@ EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
 
-# TODO not all these classes will be needed then. 
-class ReversiModel: # perhaps combine both current board and weighed board to find best solution? 
-    # game is then calculated either here or in reality just by game training model
-    # then result is sent back to use
-    
-    #handle actual reversi content here, add the current and weighted board here
-    # optimize it and it will be used and the env with select actions
-    # then once handled in ML training and testing output will be returned and send back to main_player.py
+# TODO work on initial template like reversi enviroment then later on think of reversi model for heuristics etc.
+class ReversiModel:
+    """ Will handle the actual implemenation of the Reversi Game; like strategy, heuristics, etc """
     def __init__(self):
         pass
     
@@ -36,29 +31,45 @@ class ReversiModel: # perhaps combine both current board and weighed board to fi
         pass
 
 class ReversiEnviroment:
-    # Sets up the required reset and step for reversi enviroment
-    def __init__(self, board):
+    """Sets up the environment for Reversi Game """
+    def __init__(self, board): #or redundant?
+        self.game = reversi()
+    
+    def intialState(self, board):
         self.state = board
+        return self.state
     
     def reset(self, board):
         self.state = board
-        return self.game_state
+        return self.state
     
     def step(self, action):
+        """Handles the step into the environment (board) depending on the action
+
+        Parameters:
+            action (_type_): Represented by x,y (coordinate values)
+
+        Returns:
+            observation: _description_
+            reward: _description_
+            terminated: _description_
+            info: _description_
+        """
+        x, y = action
         observation = self.game_state
-        #reward = #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
+        reward = self.game.step(x,y,self.game.turn, False) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
         # instead it could be automatic from the ML learning on its own best area to go to?
-        #terminated = T or F
+        terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way?
         #info = Extra Info
         #return all data
-        return observation # for now 
+        return observation, reward, terminated, {} # for now 
     
     def action_space(self):
-        pass
+        pass #checks for valid moves using reversi rules class
 
     #not sure 
     def observation_space(self):
-        pass
+        return (8,8) # or just return board?
 
 class ReplayMemory(object):
     def __init__(self, capacity):
@@ -91,7 +102,7 @@ class ValueNet(nn.Module): #Critic
     def __init__(self):
         super(ValueNet,self).__init__()
         self.fc1 = nn.Linear(n_observations, 128) 
-        self.fc2 = nn.Linear(128), 128) 
+        self.fc2 = nn.Linear(128, 128) 
         self.fc3 = nn.Linear(128, 1) # 1 represents single output neuron
     
     def forward(self):
@@ -100,7 +111,7 @@ class ValueNet(nn.Module): #Critic
         return self.fc3(x)
 ##########
 #TODO Keep here for the moment
-env = #gym.make('CartPole-v1')
+env = ReversiEnviroment() #gym.make('CartPole-v1')
 observation, info = env.reset(seed=42)
 
 action = env.action_space.sample()  # this is where you would insert your policy
@@ -201,7 +212,7 @@ def train(): #like this for now adjust contents later
     env.close()
     
 def test():
-    TestEnv = #gym.make("CartPole-v1", render_mode="human")
+    TestEnv = ReversiEnviroment()#gym.make("CartPole-v1", render_mode="human")
     observation, info = TestEnv.reset(seed=42)
 
     for _ in range(1000):
@@ -213,7 +224,6 @@ def test():
             observation, info = TestEnv.reset()
 
     TestEnv.close()
-    
         
     
 
