@@ -2,7 +2,7 @@ import pygame
 import numpy as np
 import socket, pickle
 from reversi import reversi
-from reversi_model import ReversiModel
+from reversi_model import ReversiEnvironment
 import time 
 
 
@@ -11,7 +11,7 @@ def main():
     game_socket = socket.socket()
     game_socket.connect(('127.0.0.1', 33333))
     game = reversi()
-    reversi_model = ReversiModel()
+    reversi_model = ReversiEnvironment()
 
     while True:
         data = game_socket.recv(4096)

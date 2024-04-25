@@ -1,19 +1,17 @@
+#import gymnasium as gym
 import reversi
 import math
 import random
 from collections import namedtuple, deque
-from itertools import count 
+from itertools import count
 
 import torch
 import torch.nn as nn
-import torch.optim as optim 
+import torch.optim as optim
 import torch.nn.functional as F
-
 from torch.utils.tensorboard import SummaryWriter
-from torch.distributions import Categorical
-import numpy as np
 
-BATCH_SIZE = 512
+BATCH_SIZE = 128
 GAMMA = 0.99
 EPS_START = 0.9
 EPS_END = 0.05
@@ -21,17 +19,18 @@ EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
 
-# TODO work on initial template like reversi enviroment then later on think of reversi model for heuristics etc.
 class ReversiEnvironment:
     """Sets up the environment for Reversi Game """
-    def __init__(self, board=None): #or redundant?
-        self.game = reversi.reversi()
-        # self.game.board = board
+    def __init__(self, board): #or redundant?
+        self.game = reversi()
+    
+    def intialState(self, board):
+        self.state = board
+        return self.state
     
     def reset(self, board):
-        self.game = reversi.reversi()  # Maybe?
-        self.game.board = board #maybe?
-        return self.game.board
+        self.state = board
+        return self.state
     
     def step(self, action):
         """Handles the step into the environment (board) depending on the action
@@ -46,39 +45,39 @@ class ReversiEnvironment:
             info: _description_
         """
         x, y = action
-        observation = self.game.board
+        observation = self.game
         reward = self.game.step(x,y,self.game.turn, False) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
         # instead it could be automatic from the ML learning on its own best area to go to?
-        terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way? or reward < 0? -1?
+        terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way?
         info = {} # Extra Info
         #return all data
         return observation, reward, terminated, info # for now 
-        
-    def predict(self, board):
-        available_actions = self.action_space()
-        return random.choice(available_actions)
     
-    def action_space(self): #include board as a parameter instead; for only open spaces
-        available_actions = []
-        for x in range(8):
-            for y in range(8):
-                if self.game.step(x, y, self.game.turn, commit=False) > 0:
-                    available_actions.append((x, y))
-        return available_actions
+    def action_space(self):
+        pass #checks for valid moves using reversi rules class
+
+    #not sure 
+    def observation_space(self):
+        return (8,8) # or just return board?
+    
+    def predict(self, board):
+        pass
 
 class ReplayMemory(object):
+
     def __init__(self, capacity):
         self.memory = deque([], maxlen=capacity)
-        
+
     def push(self, *args):
+        """Save a transition"""
         self.memory.append(Transition(*args))
-    
+
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
-        
+
     def __len__(self):
         return len(self.memory)
-        
+    
 class DQN(nn.Module):
 
     def __init__(self, n_observations, n_actions):
@@ -87,16 +86,22 @@ class DQN(nn.Module):
         self.layer2 = nn.Linear(128, 128)
         self.layer3 = nn.Linear(128, n_actions)
 
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
     def forward(self, x):
         x = F.relu(self.layer1(x))
         x = F.relu(self.layer2(x))
         return self.layer3(x)
-    
-env = ReversiEnvironment() #gym.make('CartPole-v1')
-observation, info = env.reset()
+
+
+env = ReversiEnvironment()
+observation, info = env.reset(seed=42)
 
 action = env.action_space.sample()  # this is where you would insert your policy
 observation, reward, terminated, truncated, info = env.step(action)
+
+Train = True
+
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
@@ -109,8 +114,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
-################
-  
+ 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
 target_net.load_state_dict(policy_net.state_dict())
@@ -216,7 +220,7 @@ if Train:
 env.close()
 
 TestEnv = ReversiEnvironment()
-observation, info = TestEnv.reset()
+observation, info = TestEnv.reset(seed=42)
 
 for _ in range(1000):
     state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
