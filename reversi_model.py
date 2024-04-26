@@ -13,6 +13,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.distributions import Categorical
 import numpy as np
 
+Train = True
+
 BATCH_SIZE = 512
 GAMMA = 0.99
 EPS_START = 0.9
@@ -31,19 +33,12 @@ class ReversiEnvironment:
     def reset(self, board):
         self.game = reversi.reversi()  # Maybe?
         self.game.board = board #maybe?
-        return self.game.board
+        observation = self.game.board
+        info = {}
+        return self.game.board, info
     
     def step(self, action):
         """Handles the step into the environment (board) depending on the action
-
-        Parameters:
-            action (_type_): Represented by x,y (coordinate values)
-
-        Returns:
-            observation: _description_
-            reward: _description_
-            terminated: _description_
-            info: _description_
         """
         x, y = action
         observation = self.game.board
@@ -93,15 +88,17 @@ class DQN(nn.Module):
         return self.layer3(x)
     
 env = ReversiEnvironment() #gym.make('CartPole-v1')
-observation, info = env.reset()
-
-action = env.action_space.sample()  # this is where you would insert your policy
-observation, reward, terminated, truncated, info = env.step(action)
+observation, info = env.reset(env.game.board)
 
 # Get number of actions from gym action space
-n_actions = env.action_space.n
+available_actions = env.action_space()#.sample()  # this is where you would insert your policy
+n_actions = random.choice(available_actions)
+
+observation, reward, terminated, info = env.step(n_actions)
+#observation, reward, terminated, truncated, info = env.step(n_actions)
+
 # Get the number of state observations
-state, info = env.reset()
+state, info = env.reset(env.game.board)
 n_observations = len(state)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -178,13 +175,13 @@ if Train:
 
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
-        state, info = env.reset()
+        state, info = env.reset(env.game.board)
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         total_reward = 0
         num_steps = 0
         for t in count():
             action = select_action(state)
-            observation, reward, terminated, truncated, _ = env.step(action.item())
+            observation, reward, terminated, truncated = env.step(action) #, _ = env.step(action.item())
             reward = torch.tensor([reward], device=device)
             done = terminated or truncated
 
@@ -224,6 +221,6 @@ for _ in range(1000):
     observation, reward, terminated, truncated, _ = TestEnv.step(action.item())
 
     if terminated or truncated:
-        observation, info = TestEnv.reset()
+        observation, info = TestEnv.reset(env.game.board)
 
 TestEnv.close()
