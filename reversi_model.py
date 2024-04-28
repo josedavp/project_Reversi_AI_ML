@@ -31,11 +31,11 @@ class ReversiEnvironment:
         # self.game.board = board
     
     def reset(self, board):
-        self.game = reversi.reversi()  # Maybe?
-        self.game.board = board #maybe?
+        self.game = reversi.reversi()
+        self.game.board = board  # Reset or set specific board
         observation = self.game.board
         info = {}
-        return self.game.board, info
+        return observation, info
     
     def step(self, action):
         """Handles the step into the environment (board) depending on the action
@@ -43,14 +43,16 @@ class ReversiEnvironment:
         x, y = action
         observation = self.game.board
         reward = self.game.step(x,y,self.game.turn, False) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
+        #reward = self.calculate_reward(observation, x, y) 
         # instead it could be automatic from the ML learning on its own best area to go to?
         terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way? or reward < 0? -1?
         info = {} # Extra Info
         #return all data
         return observation, reward, terminated, info # for now 
+    
         
     def predict(self, board):
-        available_actions = self.action_space()
+        available_actions = self.action_space(board)
         return random.choice(available_actions)
     
     def action_space(self): #include board as a parameter instead; for only open spaces
@@ -60,6 +62,10 @@ class ReversiEnvironment:
                 if self.game.step(x, y, self.game.turn, commit=False) > 0:
                     available_actions.append((x, y))
         return available_actions
+    
+    
+    
+    
 
 class ReplayMemory(object):
     def __init__(self, capacity):
@@ -101,6 +107,8 @@ observation, reward, terminated, info = env.step(n_actions)
 state, info = env.reset(env.game.board)
 n_observations = len(state)
 
+n_actions = 64
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device('cpu')
 
@@ -115,6 +123,7 @@ target_net.load_state_dict(policy_net.state_dict())
 optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(10000)
 
+
 def select_action(state):
     global steps_done
     sample = random.random()
@@ -126,9 +135,15 @@ def select_action(state):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return policy_net(state).max(1)[1].view(1, 1)
+            return policy_net(state).max(1)[1].item()#.view(1, 1)
+               
     else:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+        chosen_action = random.choice(available_actions)
+        return (chosen_action[0], chosen_action[1])  # Convert tensor to tuple
+
+        #return torch.tensor([[random.choice(available_actions)]], device=device, dtype=torch.long)
+        #return torch.tensor([[env.action_space()]], device=device, dtype=torch.long)
+ #.sample()]], device=device, dtype=torch.long)
 
 
 episode_durations = []
