@@ -25,12 +25,13 @@ LR = 1e-4
 
 # TODO work on initial template like reversi enviroment then later on think of reversi model for heuristics etc.
 class ReversiEnvironment:
-    """Sets up the environment for Reversi Game """
+    """Sets up the Environment for Reversi Game """
     def __init__(self, board=None): #or redundant?
         self.game = reversi.reversi()
         # self.game.board = board
     
     def reset(self, board):
+        """ Resets board for training session """
         self.game = reversi.reversi()
         self.game.board = board  # Reset or set specific board
         observation = self.game.board
@@ -38,32 +39,63 @@ class ReversiEnvironment:
         return observation, info
     
     def step(self, action):
-        """Handles the step into the environment (board) depending on the action
-        """
+        """Handles the step into the environment (board) depending on the action"""
         x, y = action
         observation = self.game.board
-        reward = self.game.step(x,y,self.game.turn, False) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
-        #reward = self.calculate_reward(observation, x, y) 
+        #reward = self.game.step(x,y,self.game.turn, False) #think on this and avoid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
+        reward = self.calculate_reward(observation, x, y) 
         # instead it could be automatic from the ML learning on its own best area to go to?
         terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way? or reward < 0? -1?
         info = {} # Extra Info
         #return all data
         return observation, reward, terminated, info # for now 
-    
-        
+     
     def predict(self, board):
         available_actions = self.action_space(board)
         return random.choice(available_actions)
     
-    def action_space(self): #include board as a parameter instead; for only open spaces
+    def action_space(self, board): #include board as a parameter instead; for only open spaces
+        """ Needed to handle possible actions """
         available_actions = []
+        board = self.game.board if board is None else board
         for x in range(8):
             for y in range(8):
                 if self.game.step(x, y, self.game.turn, commit=False) > 0:
                     available_actions.append((x, y))
         return available_actions
     
-    
+    def calculate_reward(self, board, x, y):
+        """Calculates the reward based on the action taken (placing a piece)"""
+        # Get the current player's color
+        current_player = self.game.turn
+        
+        # Count the total number of pieces for each player
+        player_piece_count = self.count_pieces(board, current_player)
+        opponent_piece_count = self.count_pieces(board, -current_player)
+        
+        # Calculate the piece difference
+        piece_difference = player_piece_count - opponent_piece_count
+
+        # Reward for placing a piece
+        place_piece_reward = 1
+
+        # Reward for corner placement
+        corner_reward = 0
+        if (x in [0, 7] and y in [0, 7]):
+            corner_reward = 5  # Adjust weight as needed
+
+        # Combine the rewards with weights
+        total_reward = (piece_difference * 0.8) + (place_piece_reward * 0.1) + (corner_reward * 0.05)
+        return total_reward
+
+    def count_pieces(self, board, color):
+        """Counts the number of pieces of current player color on the board"""
+        count = 0
+        for row in board:
+            for piece in row:
+                if piece == color:
+                    count += 1
+        return count
     
     
 
@@ -97,17 +129,16 @@ env = ReversiEnvironment() #gym.make('CartPole-v1')
 observation, info = env.reset(env.game.board)
 
 # Get number of actions from gym action space
-available_actions = env.action_space()#.sample()  # this is where you would insert your policy
+available_actions = env.action_space(env.game.board)#.sample()  # this is where you would insert your policy
 n_actions = random.choice(available_actions)
 
 observation, reward, terminated, info = env.step(n_actions)
-#observation, reward, terminated, truncated, info = env.step(n_actions)
 
 # Get the number of state observations
 state, info = env.reset(env.game.board)
 n_observations = len(state)
 
-n_actions = 64
+n_actions = 64 # or perhaps change depending on how many pieces are currently on board? each increment means less piece placement possibility
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device('cpu')
@@ -132,9 +163,7 @@ def select_action(state):
     steps_done += 1
     if sample > eps_threshold:
         with torch.no_grad():
-            # t.max(1) will return the largest column value of each row.
-            # second column on max result is index of where max element was
-            # found, so we pick action with the larger expected reward.
+
             return policy_net(state).max(1)[1].item()#.view(1, 1)
                
     else:
