@@ -48,7 +48,7 @@ class ReversiEnvironment:
         terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way? or reward < 0? -1?
         info = {} # Extra Info
         #return all data
-        return observation, reward, terminated, info # for now 
+        return observation, reward, terminated, truncated, info # for now 
      
     def predict(self, board):
         available_actions = self.action_space(board)
@@ -69,11 +69,6 @@ class ReversiEnvironment:
         # Get the current player's color
         current_player = self.game.turn
         
-         # Convert tensor values to scalar
-        x_scalar = x #
-        y_scalar = y #
-        
-    
         # Count the total number of pieces for each player
         player_piece_count = self.count_pieces(board, current_player)
         opponent_piece_count = self.count_pieces(board, -current_player)
@@ -86,7 +81,7 @@ class ReversiEnvironment:
 
         # Reward for corner placement
         corner_reward = 0
-        if (x_scalar in [0, 7] and y_scalar in [0, 7]):
+        if (x in [0, 7] and y in [0, 7]):
             corner_reward = 5  # Adjust weight as needed
 
         # Combine the rewards with weights
@@ -168,14 +163,8 @@ def select_action(state):
     steps_done += 1
     if sample > eps_threshold:
         with torch.no_grad():
-            output = policy_net(state)#.max(1)[1]
-            output = output.view(-1, n_actions)
-            print("Output shape:", output.shape)
-            max_Index = output.max(1)[1]
-            print("Max Index: ", max_Index)
-            x = max_Index // 8  # Assuming the board shape is 8x8
-            y = max_Index % 8
-            return (x,y) #policy_net(state).max(1)[1]#.item()#.view(1, 1)
+
+            return policy_net(state).max(1)[1].item()#.view(1, 1)
                
     else:
         chosen_action = random.choice(env.action_space(state))
@@ -273,9 +262,9 @@ observation, info = TestEnv.reset()
 for _ in range(1000):
     state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
     action = select_action(state) # this is where you would insert your policy
-    observation, reward, terminated, _ = TestEnv.step(action.item())
+    observation, reward, terminated, truncated, _ = TestEnv.step(action.item())
 
-    if terminated: # or truncated:
+    if terminated or truncated:
         observation, info = TestEnv.reset(env.game.board)
 
 TestEnv.close()

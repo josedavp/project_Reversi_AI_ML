@@ -3,6 +3,7 @@ import numpy as np
 import socket, pickle
 from reversi import reversi
 from reversi_model import ReversiEnvironment
+from reversi_model1 import ReversiEnvironment
 import time 
 
 
@@ -12,6 +13,7 @@ def main():
     game_socket.connect(('127.0.0.1', 33333))
     game = reversi()
     reversi_model = ReversiEnvironment()
+    #reversi_model1 = ReversiEnvironment()
 
     while True:
         data = game_socket.recv(4096)
@@ -23,6 +25,7 @@ def main():
         game.board = board
        
         predicted_move = reversi_model.predict(board)
+        #predicted_move = reversi_model1.predict(board)
         
         # Print the chosen move
         print("Selected move:", (predicted_move[0], predicted_move[1])) #x, y))

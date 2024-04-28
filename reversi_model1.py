@@ -69,11 +69,6 @@ class ReversiEnvironment:
         # Get the current player's color
         current_player = self.game.turn
         
-         # Convert tensor values to scalar
-        x_scalar = x #
-        y_scalar = y #
-        
-    
         # Count the total number of pieces for each player
         player_piece_count = self.count_pieces(board, current_player)
         opponent_piece_count = self.count_pieces(board, -current_player)
@@ -86,7 +81,7 @@ class ReversiEnvironment:
 
         # Reward for corner placement
         corner_reward = 0
-        if (x_scalar in [0, 7] and y_scalar in [0, 7]):
+        if (x in [0, 7] and y in [0, 7]):
             corner_reward = 5  # Adjust weight as needed
 
         # Combine the rewards with weights
@@ -160,7 +155,7 @@ optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(10000)
 
 
-def select_action(state):
+def select_action(state, available_actions):
     global steps_done
     sample = random.random()
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
@@ -168,18 +163,25 @@ def select_action(state):
     steps_done += 1
     if sample > eps_threshold:
         with torch.no_grad():
-            output = policy_net(state)#.max(1)[1]
-            output = output.view(-1, n_actions)
-            print("Output shape:", output.shape)
-            max_Index = output.max(1)[1]
-            print("Max Index: ", max_Index)
-            x = max_Index // 8  # Assuming the board shape is 8x8
-            y = max_Index % 8
-            return (x,y) #policy_net(state).max(1)[1]#.item()#.view(1, 1)
-               
+            q_values = policy_net(state)
+            action_probs = F.softmax(q_values, dim=1)
+            action_probs_1d = action_probs.view(-1)  # Reshape to 1D tensor
+            action_idx = torch.multinomial(action_probs_1d, 1).item()
+            action = (action_idx // 8, action_idx % 8)  # Convert index to (x, y)
+
+          
+            if action in available_actions:
+                return action
+            else:
+            
+                chosen_action = random.choice(available_actions)
+                return chosen_action
     else:
-        chosen_action = random.choice(env.action_space(state))
-        return (chosen_action[0], chosen_action[1])  # Convert tensor to tuple
+        chosen_action = random.choice(available_actions)
+        return chosen_action
+
+
+  # Convert tensor to tuple
 
         #return torch.tensor([[random.choice(available_actions)]], device=device, dtype=torch.long)
         #return torch.tensor([[env.action_space()]], device=device, dtype=torch.long)
@@ -229,41 +231,43 @@ if Train:
     writer = SummaryWriter()
 
     for i_episode in range(num_episodes):
-        # Initialize the environment and get it's state
+    # Initialize the environment and get its state
         state, info = env.reset(env.game.board)
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         total_reward = 0
         num_steps = 0
         for t in count():
-            action = select_action(state)
-            observation, reward, terminated, _ = env.step(action) #, _ = env.step(action.item())
+            available_actions = env.action_space(env.game.board)  # Get available actions
+            action = select_action(state, available_actions)  # Pass available_actions
+            observation, reward, terminated, truncated = env.step(action)
             reward = torch.tensor([reward], device=device)
-            done = terminated #or truncated
+            done = terminated or truncated
 
-            if terminated:
-                next_state = None
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+        if terminated:
+            next_state = None
+        else:
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
-            # Store the transition in memory
-            memory.push(state, action, next_state, reward)
+        # Store the transition in memory
+        memory.push(state, action, next_state, reward)
 
-            # Move to the next state
-            state = next_state
+        # Move to the next state
+        state = next_state
 
-            # Perform one step of the optimization (on the policy network)
-            optimize_model()
-            target_net_state_dict = target_net.state_dict()
-            policy_net_state_dict = policy_net.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
-            target_net.load_state_dict(target_net_state_dict)
+        # Perform one step of the optimization (on the policy network)
+        optimize_model()
+        target_net_state_dict = target_net.state_dict()
+        policy_net_state_dict = policy_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+        target_net.load_state_dict(target_net_state_dict)
 
-            if done:
-                episode_durations.append(t + 1)
-                break
-        if i_episode % 10 == 0:
-            print(i_episode)
+        if done:
+            episode_durations.append(t + 1)
+            break
+    if i_episode % 10 == 0:
+        print(i_episode)
+
 
 env.close()
 
@@ -273,9 +277,9 @@ observation, info = TestEnv.reset()
 for _ in range(1000):
     state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
     action = select_action(state) # this is where you would insert your policy
-    observation, reward, terminated, _ = TestEnv.step(action.item())
+    observation, reward, terminated, truncated, _ = TestEnv.step(action.item())
 
-    if terminated: # or truncated:
+    if terminated or truncated:
         observation, info = TestEnv.reset(env.game.board)
 
 TestEnv.close()
