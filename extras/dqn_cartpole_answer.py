@@ -31,10 +31,11 @@ LR = 1e-4
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
+print(f"n_actions: {n_actions}")
 # Get the number of state observations
 state, info = env.reset()
 n_observations = len(state)
-
+print(f"n_observations: {n_observations}")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device('cpu')
 
@@ -81,6 +82,7 @@ memory = ReplayMemory(10000)
 def select_action(state):
     global steps_done
     sample = random.random()
+   # print(f"sample: {sample}")
     eps_threshold = EPS_END + (EPS_START - EPS_END) * \
         math.exp(-1. * steps_done / EPS_DECAY)
     steps_done += 1
@@ -139,6 +141,7 @@ if Train:
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
         state, info = env.reset()
+        print(f"state: {state}")
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         total_reward = 0
         num_steps = 0

@@ -1,3 +1,4 @@
+import pygame
 import reversi
 import math
 import random
@@ -22,6 +23,8 @@ EPS_END = 0.05
 EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # TODO work on initial template like reversi enviroment then later on think of reversi model for heuristics etc.
 class ReversiEnvironment:
@@ -48,6 +51,7 @@ class ReversiEnvironment:
         terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way? or reward < 0? -1?
         info = {} # Extra Info
         #return all data
+        print(f"HERE STEP:\n\t  O:\n {observation},\n R: {reward}, T: {terminated}, I: {info} \n")
         return observation, reward, terminated, info # for now 
      
     def predict(self, board):
@@ -70,9 +74,9 @@ class ReversiEnvironment:
         current_player = self.game.turn
         
          # Convert tensor values to scalar
-        x_scalar = x #
-        y_scalar = y #
-        
+        x_scalar = x#.item() #
+        y_scalar = y#.item() #
+        print(f"x_scalar: {x_scalar}  y_scalar: {y_scalar}")
     
         # Count the total number of pieces for each player
         player_piece_count = self.count_pieces(board, current_player)
@@ -102,6 +106,12 @@ class ReversiEnvironment:
                     count += 1
         return count
     
+    #TODO May be dangerous below since it may close the entire pygame?
+    def close(self):
+        if self.window is not None:
+            pygame.display.quit()
+        pygame.quit()
+    
     
 
 class ReplayMemory(object):
@@ -120,6 +130,7 @@ class ReplayMemory(object):
 class DQN(nn.Module):
 
     def __init__(self, n_observations, n_actions):
+        
         super(DQN, self).__init__()
         self.layer1 = nn.Linear(n_observations, 128)
         self.layer2 = nn.Linear(128, 128)
@@ -135,25 +146,27 @@ observation, info = env.reset(env.game.board)
 
 # Get number of actions from gym action space
 available_actions = env.action_space(env.game.board)#.sample()  # this is where you would insert your policy
-n_actions = random.choice(available_actions)
 
+n_actions = random.choice(available_actions)
+print(f"n_actions: {n_actions}  available_actions: {available_actions}")
+print(f"length n_actions: {len(n_actions)}  length available_actions: {len(available_actions)}")
 observation, reward, terminated, info = env.step(n_actions)
 
 # Get the number of state observations
 state, info = env.reset(env.game.board)
 n_observations = len(state)
+print(f"n_actions: {n_actions}  n_observations: {n_observations}")
+#n_actions = 64 # or perhaps change depending on how many pieces are currently on board? each increment means less piece placement possibility
 
-n_actions = 64 # or perhaps change depending on how many pieces are currently on board? each increment means less piece placement possibility
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+#device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # device = torch.device('cpu')
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
 ################
-  
-policy_net = DQN(n_observations, n_actions).to(device)
-target_net = DQN(n_observations, n_actions).to(device)
+print(f"HERE: n_actions: {len(n_actions)}")
+policy_net = DQN(n_observations, len(available_actions)).to(device) # len(n_actions)
+target_net = DQN(n_observations, len(available_actions)).to(device) #len(n_actions)
 target_net.load_state_dict(policy_net.state_dict())
 
 optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
@@ -169,16 +182,19 @@ def select_action(state):
     if sample > eps_threshold:
         with torch.no_grad():
             output = policy_net(state)#.max(1)[1]
-            output = output.view(-1, n_actions)
+            output = output.view(-1,  len(env.action_space(state)))#len(n_actions))
+            print("Output n_actions:", n_actions)
             print("Output shape:", output.shape)
             max_Index = output.max(1)[1]
             print("Max Index: ", max_Index)
             x = max_Index // 8  # Assuming the board shape is 8x8
             y = max_Index % 8
+            print(f"X: {x} Y: {y}")
             return (x,y) #policy_net(state).max(1)[1]#.item()#.view(1, 1)
                
     else:
         chosen_action = random.choice(env.action_space(state))
+        print(f"chosen_action: {chosen_action}")
         return (chosen_action[0], chosen_action[1])  # Convert tensor to tuple
 
         #return torch.tensor([[random.choice(available_actions)]], device=device, dtype=torch.long)
@@ -228,7 +244,7 @@ else:
 if Train:
     writer = SummaryWriter()
 
-    for i_episode in range(num_episodes):
+    for i_episode in range(10):#TODO COMMENT OUT FOR NOW REMOVE COMMENT LATER #num_episodes):
         # Initialize the environment and get it's state
         state, info = env.reset(env.game.board)
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
@@ -236,7 +252,9 @@ if Train:
         num_steps = 0
         for t in count():
             action = select_action(state)
+            print(f"In for Loop : action: {action} \n")
             observation, reward, terminated, _ = env.step(action) #, _ = env.step(action.item())
+            
             reward = torch.tensor([reward], device=device)
             done = terminated #or truncated
 
@@ -259,13 +277,14 @@ if Train:
                 target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
             target_net.load_state_dict(target_net_state_dict)
 
-            if done:
+            if done:#.item():
                 episode_durations.append(t + 1)
                 break
         if i_episode % 10 == 0:
             print(i_episode)
+#torch.save()
 
-env.close()
+F.close()
 
 TestEnv = ReversiEnvironment()
 observation, info = TestEnv.reset()
@@ -277,5 +296,5 @@ for _ in range(1000):
 
     if terminated: # or truncated:
         observation, info = TestEnv.reset(env.game.board)
-
-TestEnv.close()
+F.close()
+#TestEnv.close()
