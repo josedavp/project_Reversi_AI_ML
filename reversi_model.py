@@ -1,17 +1,19 @@
-import reversi
 import math
 import random
+import numpy as np
+import socket, pickle
+from reversi import reversi
 from collections import namedtuple, deque
-from itertools import count 
+from itertools import count
+#from greedy_player import greedy_player
 
 import torch
 import torch.nn as nn
-import torch.optim as optim 
+import torch.optim as optim
 import torch.nn.functional as F
-
 from torch.utils.tensorboard import SummaryWriter
-from torch.distributions import Categorical
-import numpy as np
+
+Train = True
 
 BATCH_SIZE = 512
 GAMMA = 0.99
@@ -21,199 +23,325 @@ EPS_DECAY = 1000
 TAU = 0.005
 LR = 1e-4
 
-# TODO not all these classes will be needed then. 
-class ReversiModel: # perhaps combine both current board and weighed board to find best solution? 
-    # game is then calculated either here or in reality just by game training model
-    # then result is sent back to use
-    
-    #handle actual reversi content here, add the current and weighted board here
-    # optimize it and it will be used and the env with select actions
-    # then once handled in ML training and testing output will be returned and send back to main_player.py
-    def __init__(self):
-        pass
-    
-    def predict(self, board_state):
-        pass
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-class ReversiEnviroment:
-    # Sets up the required reset and step for reversi enviroment
-    def __init__(self, board):
-        self.state = board
+# class GreedyPlayer:
+#     def greedyPlayer(self):
+#         x = -1
+#         y = -1
+#         max = 0
+#         game.board = board
+#         for i in range(8):
+#             for j in range(8):
+#                 cur = game.step(i, j, turn, False)
+#                 if cur > max:
+#                     max = cur
+#                     x, y = i, j
+#         return x,y
+
+game_socket = socket.socket()
+game_socket.connect(('127.0.0.1', 33333))
+game = reversi()
+
+class ReversiEnvironment:
+    """Sets up the Environment for Reversi Game """
+    def __init__(self, board=None): #or redundant?
+        self.game = reversi() #.reversi()
     
     def reset(self, board):
-        self.state = board
-        return self.game_state
+        """ Resets board for training session """
+        self.game = reversi()#.reversi()
+        self.game.board = board  # Reset or set specific board
+        observation = self.game.board
+        info = {}
+        return observation, info
     
     def step(self, action):
-        observation = self.game_state
-        #reward = #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
+        ############## original ##########
+        x = action[0].item()
+        y = action[1].item()
+        game_socket.send(pickle.dumps([x,y]))
+        #data = game_socket.recv(4096)
+        #######################################
+        game = reversi()
+        #reversi_model = ReversiEnvironment()
+
+        data = game_socket.recv(4096)
+        turn, board = pickle.loads(data)
+        if turn == 0:
+            game_socket.close()
+            return
+        game.board = board
+
+        ## he commented this part below out but its still needed
+        observation = self.game.board
+        reward = self.calculate_reward(game.board, x, y) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
         # instead it could be automatic from the ML learning on its own best area to go to?
-        #terminated = T or F
-        #info = Extra Info
+        #terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way?
+        info = {} # Extra Info
         #return all data
-        return observation # for now 
+        return observation, reward, False, info 
+        #return turn, board
+
+    def stepTest(self, action):
+        ############## original ##########
+        x = action[0].item()
+        y = action[1].item()
+        game_socket.send(pickle.dumps([x,y]))
+        #data = game_socket.recv(4096)
+        #######################################
+        game = reversi()
+        #reversi_model = ReversiEnvironment()
+
+        data = game_socket.recv(4096)
+        turn, board = pickle.loads(data)
+        if turn == 0:
+            game_socket.close()
+            return
+        game.board = board
+     
+    def predict(self, board):
+        """Returns random valid move"""
+        available_actions = self.action_space(board)
+        return random.choice(available_actions)
     
-    def action_space(self):
-        pass
-
-    #not sure 
-    def observation_space(self):
-        pass
-
-class ReplayMemory(object):
-    def __init__(self, capacity):
-        self.memory = deque([], maxlen=capacity)
+    def action_space(self, board): #include board as a parameter instead; for only open spaces
+        """ Needed to handle possible actions """
+        coordinate_actions = []
+        available_actions = 0#[]
+        board = self.game.board if board is None else board
+        for x in range(8):
+            for y in range(8):
+                if self.game.step(x, y, self.game.turn, commit=False) > 0:
+                    coordinate_actions.append((x, y))
+                    available_actions += 1
+        return available_actions, coordinate_actions
+    
+    def calculate_reward(self, board, x, y):
+        """Calculates the reward based on the action taken (placing a piece)"""
+        # Get the current player's color
+        current_player = self.game.turn
         
-    def push(self, *args):
-        self.memory.append(Transition(*args))
+         # Convert tensor values to scalar
+        x_scalar = x#.item() #
+        y_scalar = y#.item() #
+        print(f"x_scalar: {x_scalar}  y_scalar: {y_scalar}")
     
-    def sample(self, batch_size):
-        return random.sample(self.memory, batch_size)
+        # Count the total number of pieces for each player
+        player_piece_count = self.count_pieces(board, current_player)
+        opponent_piece_count = self.count_pieces(board, -current_player)
         
-    def __len__(self):
-        return len(self.memory)
-        
-class PolicyNet(nn.Module): #Actor
-    def __init__(self, n_observations, n_actions):
-        super(PolicyNet, self)._init__()
-        self.layer1 = nn.Linear(n_observations, 128)
-        self.layer2 = nn.Linear(128, 128)
-        self.layer3 = nn.Linear(128, n_actions) 
-    
-    def forward(self):
-        x = F.relu(self.layer1(x))
-        x = F.relu(self.layer2(x))
-        x = F.relu(self.layer3(x))
-        x = F.softmax(x)
-        return x
-    
-class ValueNet(nn.Module): #Critic
-    def __init__(self):
-        super(ValueNet,self).__init__()
-        self.fc1 = nn.Linear(n_observations, 128) 
-        self.fc2 = nn.Linear(128), 128) 
-        self.fc3 = nn.Linear(128, 1) # 1 represents single output neuron
-    
-    def forward(self):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        return self.fc3(x)
-##########
-#TODO Keep here for the moment
-env = #gym.make('CartPole-v1')
-observation, info = env.reset(seed=42)
+        # Calculate the piece difference
+        piece_difference = player_piece_count - opponent_piece_count
 
-action = env.action_space.sample()  # this is where you would insert your policy
-observation, reward, terminated, truncated, info = env.step(action)
+        # Reward for placing a piece
+        place_piece_reward = 1
 
-# Get number of actions from gym action space
-n_actions = env.action_space.n
-# Get the number of state observations
-state, info = env.reset()
-n_observations = len(state)
+        # Reward for corner placement
+        corner_reward = 0
+        if (x_scalar in [0, 7] and y_scalar in [0, 7]):
+            corner_reward = 5  # Adjust weight as needed
+
+        # Combine the rewards with weights
+        total_reward = (piece_difference * 0.8) + (place_piece_reward * 0.1) + (corner_reward * 0.05)
+        return total_reward
+
+    def count_pieces(self, board, color):
+        """Counts the number of pieces of current player color on the board"""
+        count = 0
+        for row in board:
+            for piece in row:
+                if piece == color:
+                    count += 1
+        return count
+
+env = ReversiEnvironment()
+observation, info = env.reset(env.game.board)
+
+n_actions = 64
+n_observations = 64
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
-################3
 
-p_net = PolicyNet(n_observations, n_actions).to(device)
+class ReplayMemory(object):
 
-optimizer = optim.AdamW(p_net.parameters(), lr=LR, amsgrad=True)
+    def __init__(self, capacity):
+        self.memory = deque([], maxlen=capacity)
+
+    def push(self, *args):
+        """Save a transition"""
+        self.memory.append(Transition(*args))
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+    def __len__(self):
+        return len(self.memory)
+    
+class DQN(nn.Module):
+
+    def __init__(self, n_observations, n_actions):
+        super(DQN, self).__init__()
+        self.layer1 = nn.Linear(n_observations, 128)
+        self.layer2 = nn.Linear(128, 128)
+        self.layer3 = nn.Linear(128, n_actions)
+
+    # Called with either one element to determine next action, or a batch
+    # during optimization. Returns tensor([[left0exp,right0exp]...]).
+    def forward(self, x):
+        x = F.relu(self.layer1(x))
+        x = F.relu(self.layer2(x))
+        return self.layer3(x)
+    
+policy_net = DQN(n_observations, n_actions).to(device)
+target_net = DQN(n_observations, n_actions).to(device)
+target_net.load_state_dict(policy_net.state_dict())
+
+optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
 memory = ReplayMemory(10000)
 
+episode_durations = []
+steps_done = 0
+
+
 def select_action(state):
-    probs = p_net(state).cpu()
-    m = Categorical(probs)
-    action = m.sample()
-    return action.item(), m.log_prob(action)
-    
-def train(): #like this for now adjust contents later
-    episode_durations = []
-    steps_done = 0
-    
-    if torch.cuda.is_available():
-        num_episodes = 500
+    global steps_done
+    sample = random.random()
+   # print(f"sample: {sample}")
+    eps_threshold = EPS_END + (EPS_START - EPS_END) * \
+        math.exp(-1. * steps_done / EPS_DECAY)
+    steps_done += 1
+    if sample > eps_threshold:
+        with torch.no_grad():
+            print(f"State : {state}")
+            action_index = policy_net(state).max(1)[1].view(1, 1)#.item()
+            x, y = env.action_space(state)[1][action_index]
+            return torch.tensor([[x, y]], device=device, dtype=torch.long)
     else:
-        num_episodes = 50
+        print(f"STATE: ")
+        _ , options = env.action_space(state)
+        action = random.choice(options)
+        return torch.tensor(action, device=device, dtype=torch.long)
 
+def optimize_model():
+   if len(memory) < BATCH_SIZE:
+      return
+   transitions = memory.sample(BATCH_SIZE)
+   batch = Transition(*zip(*transitions))
+   non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
+                                       batch.next_state)), device=device, dtype=torch.bool)
+   non_final_next_states = torch.cat([s for s in batch.next_state
+                                             if s is not None])
+   state_batch = torch.cat(batch.state)
+   action_batch = torch.cat(batch.action)
+   reward_batch = torch.cat(batch.reward)
+
+   state_action_values = policy_net(state_batch).gather(1, action_batch)
+
+   next_state_values = torch.zeros(BATCH_SIZE, device=device)
+   with torch.no_grad():
+      next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
+   expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+
+   criterion = nn.SmoothL1Loss()
+   loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+
+   optimizer.zero_grad()
+   loss.backward()
+   torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
+   optimizer.step()
+   return loss
+
+if torch.cuda.is_available():
+    num_episodes = 500
+else:
+    num_episodes = 50
+
+if Train:
     writer = SummaryWriter()
-
-    device = torch.device('cuda')
-
 
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
-        state, info = env.reset()
+        state, info = env.reset(env.game.board)
+        print(f"state: {state}")
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         total_reward = 0
         num_steps = 0
-        saved_log_probs = []
-        rewards = []
         for t in count():
-            action, log_prob = select_action(state)
-            observation, reward, terminated, truncated, _ = env.step(action)
+            action = select_action(state)
+            print(f"action: {action}")
+            #observation, reward, terminated, truncated, _ = env.step(action.item())
+            observation, reward, terminated , _ = env.step(action)
             reward = torch.tensor([reward], device=device)
-            done = terminated or truncated
+            done = terminated #or truncated
 
             if terminated:
                 next_state = None
-            else:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+
+            # Store the transition in memory
+            memory.push(state, action, next_state, reward)
 
             # Move to the next state
             state = next_state
 
-            rewards.append(reward)
-            saved_log_probs.append(log_prob)
+            # Perform one step of the optimization (on the policy network)
+            optimize_model()
+            target_net_state_dict = target_net.state_dict()
+            policy_net_state_dict = policy_net.state_dict()
+            for key in policy_net_state_dict:
+                target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+            target_net.load_state_dict(target_net_state_dict)
+
             if done:
                 episode_durations.append(t + 1)
                 break
-
-        returns = deque(maxlen=500) 
-        n_steps = len(rewards) 
-        for t in range(n_steps)[::-1]:
-                disc_return_t = (returns[0] if len(returns)>0 else 0)
-                returns.appendleft(GAMMA*disc_return_t + rewards[t])   
-
-        eps = np.finfo(np.float32).eps.item()
-        ## eps is the smallest representable float, which is 
-        # added to the standard deviation of the returns to avoid numerical instabilities        
-        returns = torch.tensor(returns)
-        returns = (returns - returns.mean()) / (returns.std() + eps)
-        
-        # Line 7:
-        policy_loss = []
-        for log_prob, disc_return in zip(saved_log_probs, returns):
-            policy_loss.append(-log_prob * disc_return)
-        policy_loss = torch.cat(policy_loss).sum()
-        
-        # Line 8: PyTorch prefers gradient descent 
-        optimizer.zero_grad()
-        policy_loss.backward()
-        optimizer.step()
-
         if i_episode % 10 == 0:
             print(i_episode)
 
-    env.close()
-    
-def test():
-    TestEnv = #gym.make("CartPole-v1", render_mode="human")
-    observation, info = TestEnv.reset(seed=42)
+TestEnv = ReversiEnvironment() #gym.make("CartPole-v1", render_mode="human")
+observation, info = TestEnv.reset(TestEnv.game.board) # seed=42)
 
-    for _ in range(1000):
-        state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-        action, _ = select_action(state) # this is where you would insert your policy
-        observation, reward, terminated, truncated, _ = TestEnv.step(action)
 
-        if terminated or truncated:
-            observation, info = TestEnv.reset()
+#########TRYING TO SAVE CHECKPOINT ############
+# net = DQN()
+# # Additional information
+# EPOCH = 5
+# PATH = "model.pt"
+# LOSS = 0.4
 
-    TestEnv.close()
-    
-        
-    
+# torch.save({
+#             'epoch': EPOCH,
+#             'model_state_dict': net.state_dict(),
+#             'optimizer_state_dict': optimizer.state_dict(),
+#             'loss': LOSS,
+#             }, PATH)
 
+# model = Net()
+# optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+
+# checkpoint = torch.load(PATH)
+# model.load_state_dict(checkpoint['model_state_dict'])
+# optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+# epoch = checkpoint['epoch']
+# loss = checkpoint['loss']
+
+# model.eval()
+# # - or -
+# model.train()
+####################
+
+
+
+
+
+for _ in range(1000):
+    state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+    action = select_action(state) # this is where you would insert your policy
+    observation, reward, terminated, _= TestEnv.step(action)
+    if terminated: 
+        observation, info = TestEnv.reset(TestEnv.game.board)
+print("Ready to Play")

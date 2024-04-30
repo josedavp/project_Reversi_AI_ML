@@ -1,11 +1,8 @@
+import reversi
 import math
 import random
-import numpy as np
-import socket, pickle
-from reversi import reversi
 from collections import namedtuple, deque
 from itertools import count
-#from greedy_player import greedy_player
 
 import torch
 import torch.nn as nn
@@ -25,80 +22,27 @@ LR = 1e-4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# class GreedyPlayer:
-#     def greedyPlayer(self):
-#         x = -1
-#         y = -1
-#         max = 0
-#         game.board = board
-#         for i in range(8):
-#             for j in range(8):
-#                 cur = game.step(i, j, turn, False)
-#                 if cur > max:
-#                     max = cur
-#                     x, y = i, j
-#         return x,y
-
-game_socket = socket.socket()
-game_socket.connect(('127.0.0.1', 33333))
-game = reversi()
-
+# TODO work on initial template like reversi enviroment then later on think of reversi model for heuristics etc.
 class ReversiEnvironment:
     """Sets up the Environment for Reversi Game """
     def __init__(self, board=None): #or redundant?
-        self.game = reversi() #.reversi()
+        self.game = reversi.reversi()
     
     def reset(self, board):
         """ Resets board for training session """
-        self.game = reversi()#.reversi()
+        self.game = reversi.reversi()
         self.game.board = board  # Reset or set specific board
         observation = self.game.board
         info = {}
         return observation, info
     
-    def step(self, action):
-        ############## original ##########
+    def step(self, action): #action, coordinates):
         x = action[0].item()
         y = action[1].item()
-        game_socket.send(pickle.dumps([x,y]))
-        #data = game_socket.recv(4096)
-        #######################################
-        game = reversi()
-        #reversi_model = ReversiEnvironment()
-
-        data = game_socket.recv(4096)
-        turn, board = pickle.loads(data)
-        if turn == 0:
-            game_socket.close()
-            return
-        game.board = board
-
-        ## he commented this part below out but its still needed
-        observation = self.game.board
-        reward = self.calculate_reward(game.board, x, y) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
-        # instead it could be automatic from the ML learning on its own best area to go to?
-        #terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way?
-        info = {} # Extra Info
-        #return all data
-        return observation, reward, False, info 
-        #return turn, board
-
-    def stepTest(self, action):
-        ############## original ##########
-        x = action[0].item()
-        y = action[1].item()
-        game_socket.send(pickle.dumps([x,y]))
-        #data = game_socket.recv(4096)
-        #######################################
-        game = reversi()
-        #reversi_model = ReversiEnvironment()
-
-        data = game_socket.recv(4096)
-        turn, board = pickle.loads(data)
-        if turn == 0:
-            game_socket.close()
-            return
-        game.board = board
+        reversi.game_socket.send(pickle.dumps([x,y]))
+        data = reversi.game_socket.recv(4096)
+        turn, board = pickle.pickle.loads(data)
+        return turn, board
      
     def predict(self, board):
         """Returns random valid move"""
@@ -217,7 +161,7 @@ def select_action(state):
     if sample > eps_threshold:
         with torch.no_grad():
             print(f"State : {state}")
-            action_index = policy_net(state).max(1)[1].view(1, 1)#.item()
+            action_index = policy_net(state).max(1)[1].view(1, 1).item()
             x, y = env.action_space(state)[1][action_index]
             return torch.tensor([[x, y]], device=device, dtype=torch.long)
     else:
@@ -274,13 +218,14 @@ if Train:
             action = select_action(state)
             print(f"action: {action}")
             #observation, reward, terminated, truncated, _ = env.step(action.item())
-            observation, reward, terminated , _ = env.step(action)
+            observation, reward, terminated, _ = env.step(action)
             reward = torch.tensor([reward], device=device)
             done = terminated #or truncated
 
             if terminated:
                 next_state = None
-            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+            else:
+                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
 
             # Store the transition in memory
             memory.push(state, action, next_state, reward)
@@ -308,7 +253,7 @@ observation, info = TestEnv.reset(TestEnv.game.board) # seed=42)
 for _ in range(1000):
     state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
     action = select_action(state) # this is where you would insert your policy
-    observation, reward, terminated, _= TestEnv.step(action)
+    observation, reward, terminated, _= TestEnv.step(action)# truncated, _ 
+
     if terminated: 
         observation, info = TestEnv.reset(TestEnv.game.board)
-print("Ready to Play")
