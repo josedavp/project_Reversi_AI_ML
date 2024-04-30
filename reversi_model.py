@@ -217,7 +217,7 @@ def select_action(state):
     if sample > eps_threshold:
         with torch.no_grad():
             print(f"State : {state}")
-            action_index = policy_net(state).max(1)[1].view(1, 1)#.item()
+            action_index = policy_net(state).max(1)[1].view(1, 1).item()
             x, y = env.action_space(state)[1][action_index]
             return torch.tensor([[x, y]], device=device, dtype=torch.long)
     else:
