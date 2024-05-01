@@ -13,15 +13,15 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
-Train = True
+Train = True # Boolean flag for training or tetsing code
 
-BATCH_SIZE = 512
-GAMMA = 0.99
-EPS_START = 0.9
+BATCH_SIZE = 512 # Number of transitions sampled in each optimization step
+GAMMA = 0.99 # Discount factor for future rewards
+EPS_START = 0.9 # Exploraton rate range
 EPS_END = 0.05
-EPS_DECAY = 1000
-TAU = 0.005
-LR = 1e-4
+EPS_DECAY = 1000 #number of steps for exploration rate decay
+TAU = 0.005 # soft update parameter for target network
+LR = 1e-4 # learning rate
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -57,31 +57,28 @@ class ReversiEnvironment:
         return observation, info
     
     def step(self, action):
-        ############## original ##########
-        x = action[0].item()
+        """ Interacts with Reversi game server giving next state and reward"""
+        print(f"TURN STEP: {self.game.turn}")
+        action = action.view(-1)
+        x = action[0].item() # changed from [] only to [][]
         y = action[1].item()
+        self.game.step(x, y, self.game.turn, commit=True) #commits the move
         game_socket.send(pickle.dumps([x,y]))
-        #data = game_socket.recv(4096)
-        #######################################
-        game = reversi()
-        #reversi_model = ReversiEnvironment()
+
+        game = ReversiEnvironment()
 
         data = game_socket.recv(4096)
         turn, board = pickle.loads(data)
+
         if turn == 0:
             game_socket.close()
             return
-        game.board = board
-
-        ## he commented this part below out but its still needed
-        observation = self.game.board
-        reward = self.calculate_reward(game.board, x, y) #think on this and avid reward abundance perhaps not all the board will be a positive number, also consider instead of manually doing it 
-        # instead it could be automatic from the ML learning on its own best area to go to?
-        #terminated = self.game.step(x,y,self.game.turn, False) #T or F; correct way?
+        game.game.board = board
+        print(f"BOARD STEP: \n {game.game.board}")
+        #observation = self.game.board
+        reward = self.calculate_reward(game.game.board, x, y) 
         info = {} # Extra Info
-        #return all data
-        return observation, reward, False, info 
-        #return turn, board
+        return game.game.board, reward, False, info 
 
     def stepTest(self, action):
         ############## original ##########
@@ -101,12 +98,12 @@ class ReversiEnvironment:
         game.board = board
      
     def predict(self, board):
-        """Returns random valid move"""
+        """Returns random valid move from available actions"""
         available_actions = self.action_space(board)
         return random.choice(available_actions)
     
     def action_space(self, board): #include board as a parameter instead; for only open spaces
-        """ Needed to handle possible actions """
+        """ Needed to handle possible actions in game board and checks if its a legal move """
         coordinate_actions = []
         available_actions = 0#[]
         board = self.game.board if board is None else board
@@ -115,6 +112,12 @@ class ReversiEnvironment:
                 if self.game.step(x, y, self.game.turn, commit=False) > 0:
                     coordinate_actions.append((x, y))
                     available_actions += 1
+        if available_actions == 0:
+            print(f"Action Space Available Actions: {available_actions}")
+            x, y = -1, -1
+            game_socket.send(pickle.dumps([x,y]))
+            #(-1,-1)
+
         return available_actions, coordinate_actions
     
     def calculate_reward(self, board, x, y):
@@ -125,7 +128,7 @@ class ReversiEnvironment:
          # Convert tensor values to scalar
         x_scalar = x#.item() #
         y_scalar = y#.item() #
-        print(f"x_scalar: {x_scalar}  y_scalar: {y_scalar}")
+        print(f"Calculate reward: x_scalar: {x_scalar}  y_scalar: {y_scalar}")
     
         # Count the total number of pieces for each player
         player_piece_count = self.count_pieces(board, current_player)
@@ -208,6 +211,7 @@ steps_done = 0
 
 
 def select_action(state):
+    """ Selects action move to take """
     global steps_done
     sample = random.random()
    # print(f"sample: {sample}")
@@ -216,14 +220,25 @@ def select_action(state):
     steps_done += 1
     if sample > eps_threshold:
         with torch.no_grad():
-            print(f"State : {state}")
+            state = state.view(1,64)
+            print(f"Select Action IF State: \n {state}")
             action_index = policy_net(state).max(1)[1].view(1, 1).item()
+            print(f"IF Action_Index : {action_index}")
             x, y = env.action_space(state)[1][action_index]
+            print(f"IF x: {x} Y: {y}")
             return torch.tensor([[x, y]], device=device, dtype=torch.long)
     else:
-        print(f"STATE: ")
-        _ , options = env.action_space(state)
-        action = random.choice(options)
+        print(f" Select Action ELSE STATE: \n{state}")
+        available_actions , options = env.action_space(state)
+        if available_actions == 0:
+            print(f"IF Select Action Available Coordinates: {available_actions}")
+            x, y = -1, -1
+            game = ReversiEnvironment()
+            game.step(x, y, game.game.turn, commit=True)
+            game_socket.send(pickle.dumps([x,y]))
+            game_socket.close() #Maybe not here
+        else:
+            action = random.choice(options)
         return torch.tensor(action, device=device, dtype=torch.long)
 
 def optimize_model():
@@ -266,13 +281,13 @@ if Train:
     for i_episode in range(num_episodes):
         # Initialize the environment and get it's state
         state, info = env.reset(env.game.board)
-        print(f"state: {state}")
+        print(f"Train State: \n {state}")
         state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
         total_reward = 0
         num_steps = 0
         for t in count():
             action = select_action(state)
-            print(f"action: {action}")
+            print(f"Train For action: {action}")
             #observation, reward, terminated, truncated, _ = env.step(action.item())
             observation, reward, terminated , _ = env.step(action)
             reward = torch.tensor([reward], device=device)
